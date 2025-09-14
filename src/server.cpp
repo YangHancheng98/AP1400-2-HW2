@@ -30,6 +30,15 @@ std::vector<std::string> split(std::string& s, const std::string& delimiter) {
 
     return tokens;
 }
+
+bool is_valid_hash(const std::string& hash) {
+    for (int i = 0; i < 7; i++) {
+        if (hash.substr(i, i + 3) == "000") {
+            return true;
+        }
+    }
+    return false;
+}
 }  // namespace
 
 std::shared_ptr<Client> Server::add_client(std::string id) {
@@ -90,4 +99,31 @@ bool Server::add_pending_trx(std::string trx, std::string signature) {
     pending_trxs.emplace_back(trx);
 
     return true;
+}
+
+size_t Server::mine() {
+    std::string mempool{};
+    for (const auto& trx : Server::pending_trxs) mempool += trx;
+    bool mineSuccess = false;
+    size_t ret_nonce;
+    while (!mineSuccess) {
+        for (auto& [client, balance] : clients) {
+            size_t nonce = client->generate_nonce();
+            auto hash = crypto::sha256(mempool + std::to_string(nonce));
+            if (is_valid_hash(hash)) {
+                ret_nonce = nonce;
+                clients[client] += 6.25;
+                mineSuccess = true;
+            }
+        }
+    }
+    for (const auto& trx : Server::pending_trxs) {
+        std::string sender{}, receiver{};
+        double value;
+        Server::parse_trx(trx, sender, receiver, value);
+        clients[get_client(sender)] -= value;
+        clients[get_client(receiver)] += value;
+    }
+
+    return ret_nonce;
 }
